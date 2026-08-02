@@ -288,8 +288,8 @@ function startDssWorker(mqttClient) {
       );
 
       const nowMs = Date.now();
-      if (nowMs - lastDssExecutionTime < 1 * 60 * 1000) {
-        console.log('DSS pulse skipped due to 1-minute cooldown window.');
+      if (nowMs - lastDssExecutionTime < 2 * 60 * 1000) {
+        console.log('DSS pulse skipped due to 2-minute cooldown window.');
         return;
       }
       lastDssExecutionTime = nowMs;

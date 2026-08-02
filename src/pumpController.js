@@ -16,9 +16,10 @@ function validRelays(relays) {
     .sort((a, b) => a - b);
 }
 
-function publishExclusiveRelay(client, activeRelay) {
+function publishExclusiveRelay(client, activeRelay, source = 'dss_worker') {
   const payload = JSON.stringify({
-    source: 'manual_control',
+    source: source,
+    command_source: source,
     manual_override: 1,
     relay1: activeRelay === 1 ? 1 : 0,
     relay2: activeRelay === 2 ? 1 : 0,
@@ -35,9 +36,10 @@ function publishExclusiveRelay(client, activeRelay) {
   });
 }
 
-function publishAllRelaysOff(client) {
+function publishAllRelaysOff(client, source = 'dss_worker') {
   const payload = JSON.stringify({
-    source: 'manual_control',
+    source: source,
+    command_source: source,
     manual_override: 0,
     relay1: 0,
     relay2: 0,
@@ -111,22 +113,23 @@ async function runPumpPulse(client, relays, durationMs, reason, metadata = {}) {
   const selectedRelays = validRelays(relays);
   if (selectedRelays.length === 0) return;
 
+  const source = metadata.source || 'dss_worker';
   const startedAt = new Date();
 
   try {
     for (let i = 0; i < selectedRelays.length; i++) {
       const relay = selectedRelays[i];
 
-      publishExclusiveRelay(client, relay);
+      publishExclusiveRelay(client, relay, source);
       await delay(durationMs);
-      publishAllRelaysOff(client);
+      publishAllRelaysOff(client, source);
 
       if (i < selectedRelays.length - 1) {
         await delay(3000);
       }
     }
   } finally {
-    publishAllRelaysOff(client);
+    publishAllRelaysOff(client, source);
 
     await db.collection(config.firestore.pumpLogsCollection).add({
       relays: selectedRelays,
@@ -160,22 +163,23 @@ async function runPumpPulseByRelay(client, durationMsByRelay, reason, metadata =
   const durationByRelay = Object.fromEntries(entries);
   const totalDurationMs = entries.reduce((sum, [, ms]) => sum + ms, 0);
 
+  const source = metadata.source || 'dss_worker';
   const startedAt = new Date();
 
   try {
     for (let i = 0; i < entries.length; i++) {
       const [relay, durationMs] = entries[i];
 
-      publishExclusiveRelay(client, relay);
+      publishExclusiveRelay(client, relay, source);
       await delay(durationMs);
-      publishAllRelaysOff(client);
+      publishAllRelaysOff(client, source);
 
       if (i < entries.length - 1) {
         await delay(3000);
       }
     }
   } finally {
-    publishAllRelaysOff(client);
+    publishAllRelaysOff(client, source);
 
     await db.collection(config.firestore.pumpLogsCollection).add({
       relays: selectedRelays,
