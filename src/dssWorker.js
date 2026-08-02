@@ -5,6 +5,7 @@ const { sensorReadingFromFirestore } = require('./readingUtils');
 const { DEFAULT_THRESHOLDS, buildThresholds } = require('./thresholdRules');
 
 let lastDssExecutionTime = 0;
+let lastProcessedReadingId = null;
 
 function isLow(value, minimum) {
   return typeof value === 'number' && typeof minimum === 'number' && value < minimum;
@@ -288,11 +289,15 @@ function startDssWorker(mqttClient) {
       );
 
       const nowMs = Date.now();
+      if (reading.id && reading.id === lastProcessedReadingId) {
+        return;
+      }
       if (nowMs - lastDssExecutionTime < 2 * 60 * 1000) {
         console.log('DSS pulse skipped due to 2-minute cooldown window.');
         return;
       }
       lastDssExecutionTime = nowMs;
+      lastProcessedReadingId = reading.id;
 
       await runPumpPulseByRelay(
         mqttClient,
