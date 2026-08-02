@@ -313,6 +313,62 @@ async function confirmManualPumpCommandsFromSensor(payload) {
   }
 }
 
+const autoPumpSessions = new Map();
+
+async function trackRelayStateFromSensor(payload) {
+  for (let relay = 1; relay <= 4; relay++) {
+    const isOn = readRelayState(payload, relay);
+    if (isOn === undefined) continue;
+
+    const session = autoPumpSessions.get(relay);
+
+    if (isOn) {
+      if (!session && !manualPumpSessions.has(relay)) {
+        const startedAt = new Date();
+        const docRef = await db.collection(config.firestore.pumpLogsCollection).add({
+          relays: [relay],
+          pumpLabels: [RELAY_LABELS[relay] || `Relay ${relay}`],
+          durationMs: 0,
+          reason: 'Penjadwalan Otomatis',
+          action: 'running',
+          status: 'running',
+          metadata: {
+            source: payload.source || 'esp32_hardware',
+            relay,
+            state: 'on',
+          },
+          startedAt: admin.firestore.Timestamp.fromDate(startedAt),
+          startedAtLocal: startedAt.toISOString(),
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        autoPumpSessions.set(relay, { docRef, startedAt });
+        console.log(`Automatic pump relay ${relay} started on ESP32 and logged to Firestore.`);
+      }
+    } else {
+      if (session) {
+        const finishedAt = new Date();
+        const durationMs = finishedAt.getTime() - session.startedAt.getTime();
+
+        await session.docRef.set({
+          durationMs: durationMs,
+          durationMsByRelay: { [relay]: durationMs },
+          totalDurationMs: durationMs,
+          action: 'completed',
+          status: 'completed',
+          completedAt: finishedAt.toISOString(),
+          finishedAt: admin.firestore.Timestamp.fromDate(finishedAt),
+          finishedAtLocal: finishedAt.toISOString(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        autoPumpSessions.delete(relay);
+        console.log(`Automatic pump relay ${relay} stopped on ESP32 and completed in Firestore (${durationMs}ms).`);
+      }
+    }
+  }
+}
+
 function startMqttWorker() {
   const url = `mqtts://${config.mqtt.host}:${config.mqtt.port}`;
   const client = mqtt.connect(url, {
@@ -361,6 +417,7 @@ function startMqttWorker() {
         if (topic === config.mqtt.sensorTopic) {
           return Promise.resolve()
             .then(() => confirmManualPumpCommandsFromSensor(payload))
+            .then(() => trackRelayStateFromSensor(payload))
             .then(() => {
               if (!config.firestore.saveRealtimeSensorReadings) {
                 return undefined;

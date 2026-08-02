@@ -16,15 +16,41 @@ function validRelays(relays) {
     .sort((a, b) => a - b);
 }
 
-function publishRelay(client, relay, isOn) {
-  const payload = JSON.stringify({ [`relay${relay}`]: isOn ? 1 : 0 });
+function publishExclusiveRelay(client, activeRelay) {
+  const payload = JSON.stringify({
+    source: 'manual_control',
+    manual_override: 1,
+    relay1: activeRelay === 1 ? 1 : 0,
+    relay2: activeRelay === 2 ? 1 : 0,
+    relay3: activeRelay === 3 ? 1 : 0,
+    relay4: activeRelay === 4 ? 1 : 0,
+  });
   client.publish(config.mqtt.controlTopic, payload, { qos: 1 }, (error) => {
     if (error) {
-      console.error(`Failed to publish relay ${relay} command:`, error);
+      console.error(`Failed to publish exclusive relay ${activeRelay} command:`, error);
       return;
     }
 
-    console.log(`Published ${payload} to ${config.mqtt.controlTopic}`);
+    console.log(`Published exclusive payload ${payload} to ${config.mqtt.controlTopic}`);
+  });
+}
+
+function publishAllRelaysOff(client) {
+  const payload = JSON.stringify({
+    source: 'manual_control',
+    manual_override: 0,
+    relay1: 0,
+    relay2: 0,
+    relay3: 0,
+    relay4: 0,
+  });
+  client.publish(config.mqtt.controlTopic, payload, { qos: 1 }, (error) => {
+    if (error) {
+      console.error('Failed to publish all relays off command:', error);
+      return;
+    }
+
+    console.log(`Published all relays OFF payload ${payload} to ${config.mqtt.controlTopic}`);
   });
 }
 
@@ -49,41 +75,34 @@ function waitForRelayStates(client, relays, expectedState, timeoutMs = RELAY_CON
     const remaining = new Set(relays);
     let settled = false;
 
-    const cleanup = () => {
-      client.off('message', onMessage);
-      clearTimeout(timer);
-    };
-
-    const finish = (value) => {
+    const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      cleanup();
-      resolve(value);
-    };
+      client.removeListener('message', onMessage);
+      resolve(false);
+    }, timeoutMs);
 
-    const onMessage = (topic, rawPayload) => {
-      if (topic !== config.mqtt.sensorTopic) return;
+    function onMessage(topic, rawPayload) {
+      if (topic !== config.mqtt.sensorTopic || settled) return;
 
-      let payload;
       try {
-        payload = JSON.parse(rawPayload.toString());
-      } catch (_) {
-        return;
-      }
-
-      for (const relay of [...remaining]) {
-        const state = relayStateFromPayload(payload, relay);
-        if (state === expectedState) {
-          remaining.delete(relay);
+        const payload = JSON.parse(rawPayload.toString('utf8'));
+        for (const relay of [...remaining]) {
+          const actualState = relayStateFromPayload(payload, relay);
+          if (actualState === expectedState) {
+            remaining.delete(relay);
+          }
         }
-      }
 
-      if (remaining.size === 0) {
-        finish(true);
-      }
-    };
+        if (remaining.size === 0) {
+          settled = true;
+          clearTimeout(timer);
+          client.removeListener('message', onMessage);
+          resolve(true);
+        }
+      } catch (_) {}
+    }
 
-    const timer = setTimeout(() => finish(false), timeoutMs);
     client.on('message', onMessage);
   });
 }
@@ -92,34 +111,28 @@ async function runPumpPulse(client, relays, durationMs, reason, metadata = {}) {
   const selectedRelays = validRelays(relays);
   if (selectedRelays.length === 0) return;
 
-  for (const relay of selectedRelays) {
-    publishRelay(client, relay, true);
-  }
-
-  const confirmedOn = await waitForRelayStates(client, selectedRelays, true);
-  if (!confirmedOn) {
-    for (const relay of selectedRelays) {
-      publishRelay(client, relay, false);
-    }
-    console.warn(
-      `Pump pulse ignored because relay ON confirmation was not received: ${selectedRelays.join(', ')}`,
-    );
-    return;
-  }
-
   const startedAt = new Date();
 
   try {
-    await delay(durationMs);
-  } finally {
-    for (const relay of selectedRelays) {
-      publishRelay(client, relay, false);
+    for (let i = 0; i < selectedRelays.length; i++) {
+      const relay = selectedRelays[i];
+
+      publishExclusiveRelay(client, relay);
+      await delay(durationMs);
+      publishAllRelaysOff(client);
+
+      if (i < selectedRelays.length - 1) {
+        await delay(3000);
+      }
     }
+  } finally {
+    publishAllRelaysOff(client);
 
     await db.collection(config.firestore.pumpLogsCollection).add({
       relays: selectedRelays,
       pumpLabels: selectedRelays.map((relay) => RELAY_LABELS[relay]),
-      durationMs,
+      durationMs: durationMs * selectedRelays.length,
+      activationMode: 'sequential_optimistic',
       reason,
       metadata,
       startedAt,
@@ -145,52 +158,31 @@ async function runPumpPulseByRelay(client, durationMsByRelay, reason, metadata =
 
   const selectedRelays = entries.map(([relay]) => relay);
   const durationByRelay = Object.fromEntries(entries);
-  const maxDurationMs = Math.max(...entries.map(([, durationMs]) => durationMs));
-
-  for (const relay of selectedRelays) {
-    publishRelay(client, relay, true);
-  }
-
-  const confirmedOn = await waitForRelayStates(client, selectedRelays, true);
-  if (!confirmedOn) {
-    for (const relay of selectedRelays) {
-      publishRelay(client, relay, false);
-    }
-    console.warn(
-      `Pump pulse by relay ignored because relay ON confirmation was not received: ${selectedRelays.join(', ')}`,
-    );
-    return;
-  }
+  const totalDurationMs = entries.reduce((sum, [, ms]) => sum + ms, 0);
 
   const startedAt = new Date();
-  const remainingRelays = new Set(selectedRelays);
-  const startedAtMs = Date.now();
 
   try {
-    while (remainingRelays.size > 0) {
-      const elapsedMs = Date.now() - startedAtMs;
+    for (let i = 0; i < entries.length; i++) {
+      const [relay, durationMs] = entries[i];
 
-      for (const relay of [...remainingRelays]) {
-        if (elapsedMs >= durationByRelay[relay]) {
-          publishRelay(client, relay, false);
-          remainingRelays.delete(relay);
-        }
-      }
+      publishExclusiveRelay(client, relay);
+      await delay(durationMs);
+      publishAllRelaysOff(client);
 
-      if (remainingRelays.size > 0) {
-        await delay(250);
+      if (i < entries.length - 1) {
+        await delay(3000);
       }
     }
   } finally {
-    for (const relay of remainingRelays) {
-      publishRelay(client, relay, false);
-    }
+    publishAllRelaysOff(client);
 
     await db.collection(config.firestore.pumpLogsCollection).add({
       relays: selectedRelays,
       pumpLabels: selectedRelays.map((relay) => RELAY_LABELS[relay]),
-      durationMs: maxDurationMs,
+      durationMs: totalDurationMs,
       durationMsByRelay: durationByRelay,
+      activationMode: 'sequential_optimistic',
       reason,
       metadata,
       startedAt,
