@@ -321,7 +321,16 @@ const autoPumpSessions = new Map();
 
 async function trackRelayStateFromSensor(payload) {
   const source = payload.source || payload.command_source || payload.commandSource || '';
-  if (source === 'dss_worker' || source === 'schedule_worker' || source === 'ai_automation' || source === 'dss') {
+  const event = payload.event || '';
+  if (
+    source === 'dss_worker' ||
+    source === 'schedule_worker' ||
+    source === 'ai_automation' ||
+    source === 'dss' ||
+    source === 'relay_status' ||
+    source === 'realtime' ||
+    event === 'relay_status'
+  ) {
     return;
   }
   for (let relay = 1; relay <= 4; relay++) {
