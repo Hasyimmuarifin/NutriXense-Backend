@@ -139,7 +139,7 @@ async function sendThresholdNotification(alerts, reading) {
     const pStr = reading.phosphorus != null ? `${formatValue(reading.phosphorus)} mg/kg` : '-';
     const kStr = reading.potassium != null ? `${formatValue(reading.potassium)} mg/kg` : '-';
     const minEcStr = formatValue(ecLowAlert.threshold);
-    detailBody = `Nilai EC (${formatValue(ecLowAlert.value)} mS/cm) di bawah batas minimal normal ${minEcStr} mS/cm. (Estimasi tren NPK sekarang: N ${nStr}, P ${pStr}, K ${kStr}).`;
+    detailBody = `Nilai EC (${formatValue(ecLowAlert.value)} mS/cm) di bawah batas minimal normal (${minEcStr} mS/cm). Estimasi tren NPK sekarang: (N = ${nStr}, P = ${pStr}, K = ${kStr}).`;
   }
 
   const logRef = db.collection(config.firestore.thresholdAlertLogsCollection).doc();
