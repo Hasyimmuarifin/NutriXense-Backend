@@ -10,7 +10,8 @@ function formatValue(value) {
 }
 
 function formatAlertLine(alert) {
-  return `${alert.label}: ${formatValue(alert.value)} ${alert.unit} is ${alert.direction} ${formatValue(alert.threshold)} ${alert.unit}`;
+  const directionText = alert.direction === 'below' ? 'di bawah batas minimal' : 'di atas batas maksimal';
+  return `${alert.label}: ${formatValue(alert.value)} ${alert.unit} ${directionText} ${formatValue(alert.threshold)} ${alert.unit}`;
 }
 
 function alertCountForLogData(data = {}) {
@@ -137,18 +138,20 @@ async function sendThresholdNotification(alerts, reading) {
     const nStr = reading.nitrogen != null ? `${formatValue(reading.nitrogen)} mg/kg` : '-';
     const pStr = reading.phosphorus != null ? `${formatValue(reading.phosphorus)} mg/kg` : '-';
     const kStr = reading.potassium != null ? `${formatValue(reading.potassium)} mg/kg` : '-';
-    detailBody = `Nilai EC (${formatValue(ecLowAlert.value)} mS/cm) di bawah batas normal. (Estimasi Tren NPK: N ${nStr}, P ${pStr}, K ${kStr}).`;
+    const minEcStr = formatValue(ecLowAlert.threshold);
+    detailBody = `Nilai EC (${formatValue(ecLowAlert.value)} mS/cm) di bawah batas minimal normal ${minEcStr} mS/cm. (Estimasi tren NPK sekarang: N ${nStr}, P ${pStr}, K ${kStr}).`;
   }
 
   const logRef = db.collection(config.firestore.thresholdAlertLogsCollection).doc();
   const recentAlertCount = await countRecentAlertLogs(alerts);
-  const body = `${recentAlertCount} peringatan nutrisi terdeteksi dalam 1 jam terakhir. Buka halaman Logs untuk melihat detail.`;
+  const summaryText = `${recentAlertCount} peringatan nutrisi terdeteksi dalam 1 jam terakhir. Buka halaman Logs untuk melihat detail.`;
+  const bodyText = ecLowAlert ? detailBody : summaryText;
 
   await logRef.set({
     topic: config.automation.fcmTopic,
     title,
     body: detailBody,
-    summaryBody: body,
+    summaryBody: summaryText,
     recentAlertCount,
     alerts,
     sensorReadingId: reading.id,
@@ -161,9 +164,9 @@ async function sendThresholdNotification(alerts, reading) {
       topic: config.automation.fcmTopic,
       data: {
         title,
-        body,
+        body: bodyText,
         detailBody,
-        message: body,
+        message: bodyText,
         type: 'threshold_alert',
         sensorReadingId: reading.id,
         alertCount: String(alerts.length),
