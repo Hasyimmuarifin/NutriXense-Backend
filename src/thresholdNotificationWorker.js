@@ -197,6 +197,10 @@ async function sendThresholdNotification(alerts, reading) {
   try {
     const response = await admin.messaging().send({
       topic: config.automation.fcmTopic,
+      notification: {
+        title,
+        body: bodyText,
+      },
       data: {
         title,
         body: bodyText,
@@ -212,6 +216,11 @@ async function sendThresholdNotification(alerts, reading) {
       android: {
         priority: 'high',
         ttl: 60 * 60 * 1000,
+        notification: {
+          channelId: config.automation.fcmChannelId || 'nutrixense_fcm_alerts',
+          icon: 'ic_nutrixense_notification',
+          color: '#2E7D32',
+        },
       },
     });
 
