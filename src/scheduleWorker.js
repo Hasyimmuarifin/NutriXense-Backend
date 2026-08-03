@@ -98,7 +98,7 @@ function startScheduleWorker(mqttClient) {
         await runPumpPulseByRelay(
           mqttClient,
           durationMsByRelay,
-          'Penjadwalan Otomatis',
+          'Penjadwalan',
           {
             source: 'schedule_worker',
             scheduleId: doc.id,

@@ -225,7 +225,7 @@ async function saveManualPumpCommand(relay, isOn) {
       relays: [relay],
       pumpLabels: [RELAY_LABELS[relay] || `Relay ${relay}`],
       durationMs: 0,
-      reason: 'Kontrol manual pompa',
+      reason: 'Kontrol Manual',
       action: 'running',
       metadata: {
         source: 'manual_control',
@@ -253,7 +253,7 @@ async function saveManualPumpCommand(relay, isOn) {
     relays: [relay],
     pumpLabels: [RELAY_LABELS[relay] || `Relay ${relay}`],
     durationMs,
-    reason: 'Kontrol manual pompa',
+    reason: 'Kontrol Manual',
     action: 'completed',
     metadata: {
       source: 'manual_control',
@@ -346,7 +346,7 @@ async function trackRelayStateFromSensor(payload) {
           relays: [relay],
           pumpLabels: [RELAY_LABELS[relay] || `Relay ${relay}`],
           durationMs: 0,
-          reason: 'Penjadwalan Otomatis',
+          reason: 'Penjadwalan',
           action: 'running',
           status: 'running',
           metadata: {
