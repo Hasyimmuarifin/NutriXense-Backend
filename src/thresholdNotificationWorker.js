@@ -128,8 +128,18 @@ async function loadLatestReading() {
 }
 
 async function sendThresholdNotification(alerts, reading) {
-  const detailBody = alerts.map(formatAlertLine).join('\n');
-  const title = 'Peringatan Nutrisi Tanaman';
+  const ecLowAlert = alerts.find((a) => a.key === 'ec' && a.status === 'Low');
+  let title = 'Peringatan Nutrisi Tanaman';
+  let detailBody = alerts.map(formatAlertLine).join('\n');
+
+  if (ecLowAlert) {
+    title = 'Nutrisi Tanaman Menurun';
+    const nStr = reading.nitrogen != null ? `${formatValue(reading.nitrogen)} mg/kg` : '-';
+    const pStr = reading.phosphorus != null ? `${formatValue(reading.phosphorus)} mg/kg` : '-';
+    const kStr = reading.potassium != null ? `${formatValue(reading.potassium)} mg/kg` : '-';
+    detailBody = `Nilai EC (${formatValue(ecLowAlert.value)} mS/cm) di bawah batas normal. (Estimasi Tren NPK: N ${nStr}, P ${pStr}, K ${kStr}).`;
+  }
+
   const logRef = db.collection(config.firestore.thresholdAlertLogsCollection).doc();
   const recentAlertCount = await countRecentAlertLogs(alerts);
   const body = `${recentAlertCount} peringatan nutrisi terdeteksi dalam 1 jam terakhir. Buka halaman Logs untuk melihat detail.`;
@@ -247,7 +257,12 @@ function startThresholdNotificationWorker() {
       }
 
       const alerts = abnormalReadings(reading, notificationConfig.thresholds)
-        .filter((alert) => notificationConfig.mutedSensors[alert.key] !== true);
+        .filter((alert) => {
+          if (alert.key === 'nitrogen' || alert.key === 'phosphorus' || alert.key === 'potassium') {
+            return false;
+          }
+          return notificationConfig.mutedSensors[alert.key] !== true;
+        });
       if (alerts.length === 0) {
         await writeRuntimeStatus({
           state: 'normal',
