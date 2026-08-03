@@ -51,27 +51,6 @@ const LEGACY_DEFAULT_THRESHOLDS = {
 
 const SENSOR_DEFINITIONS = [
   {
-    key: 'nitrogen',
-    label: 'Estimasi Nitrogen',
-    unit: 'mg/kg',
-    minKey: 'min_nitrogen',
-    maxKey: 'max_nitrogen',
-  },
-  {
-    key: 'phosphorus',
-    label: 'Estimasi Phosphorus',
-    unit: 'mg/kg',
-    minKey: 'min_phosphorus',
-    maxKey: 'max_phosphorus',
-  },
-  {
-    key: 'potassium',
-    label: 'Estimasi Kalium',
-    unit: 'mg/kg',
-    minKey: 'min_potassium',
-    maxKey: 'max_potassium',
-  },
-  {
     key: 'ph',
     label: 'pH',
     unit: 'pH',

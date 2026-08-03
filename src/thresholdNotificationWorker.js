@@ -129,23 +129,58 @@ async function loadLatestReading() {
 }
 
 async function sendThresholdNotification(alerts, reading) {
-  const ecLowAlert = alerts.find((a) => a.key === 'ec' && a.status === 'Low');
-  let title = 'Peringatan Nutrisi Tanaman';
-  let detailBody = alerts.map(formatAlertLine).join('\n');
+  if (!alerts || alerts.length === 0) return;
 
-  if (ecLowAlert) {
-    title = 'Nutrisi Tanaman Menurun';
-    const nStr = reading.nitrogen != null ? `${formatValue(reading.nitrogen)} mg/kg` : '-';
-    const pStr = reading.phosphorus != null ? `${formatValue(reading.phosphorus)} mg/kg` : '-';
-    const kStr = reading.potassium != null ? `${formatValue(reading.potassium)} mg/kg` : '-';
-    const minEcStr = formatValue(ecLowAlert.threshold);
-    detailBody = `Nilai EC (${formatValue(ecLowAlert.value)} mS/cm) di bawah batas minimal normal (${minEcStr} mS/cm). Estimasi tren NPK sekarang: (N = ${nStr}, P = ${pStr}, K = ${kStr}).`;
+  const nStr = reading.nitrogen != null ? `${formatValue(reading.nitrogen)} mg/kg` : '-';
+  const pStr = reading.phosphorus != null ? `${formatValue(reading.phosphorus)} mg/kg` : '-';
+  const kStr = reading.potassium != null ? `${formatValue(reading.potassium)} mg/kg` : '-';
+
+  const isEcLow = alerts.some((a) => a.key === 'ec' && a.status === 'Low');
+  let title = 'Peringatan Sensor';
+  let detailBody = '';
+
+  if (alerts.length === 1) {
+    const alert = alerts[0];
+    const isLow = alert.status === 'Low';
+    if (alert.key === 'ec') {
+      if (isLow) {
+        title = 'Nutrisi Tanaman Menurun';
+        detailBody = `Nilai EC (${formatValue(alert.value)} mS/cm) di bawah batas minimal normal (${formatValue(alert.threshold)} mS/cm). Estimasi tren NPK sekarang: (N = ${nStr}, P = ${pStr}, K = ${kStr}).`;
+      } else {
+        title = 'Peringatan Nutrisi Tinggi';
+        detailBody = `Nilai EC (${formatValue(alert.value)} mS/cm) di atas batas maksimal normal (${formatValue(alert.threshold)} mS/cm).`;
+      }
+    } else if (alert.key === 'ph') {
+      title = isLow ? 'Peringatan pH Tanah Terlalu Asam' : 'Peringatan pH Tanah Terlalu Basa';
+      const dir = isLow ? `di bawah batas minimal normal ${formatValue(alert.threshold)} pH` : `di atas batas maksimal normal ${formatValue(alert.threshold)} pH`;
+      detailBody = `Nilai pH (${formatValue(alert.value)} pH) ${dir}.`;
+    } else if (alert.key === 'temperature') {
+      title = isLow ? 'Peringatan Suhu Tanah Rendah' : 'Peringatan Suhu Tanah Tinggi';
+      const dir = isLow ? `di bawah batas minimal normal ${formatValue(alert.threshold)} °C` : `di atas batas maksimal normal ${formatValue(alert.threshold)} °C`;
+      detailBody = `Suhu tanah (${formatValue(alert.value)} °C) ${dir}.`;
+    } else if (alert.key === 'moisture') {
+      title = isLow ? 'Peringatan Kelembapan Tanah Rendah' : 'Peringatan Kelembapan Tanah Tinggi';
+      const dir = isLow ? `di bawah batas minimal normal ${formatValue(alert.threshold)} %` : `di atas batas maksimal normal ${formatValue(alert.threshold)} %`;
+      detailBody = `Kelembapan tanah (${formatValue(alert.value)} %) ${dir}.`;
+    } else {
+      title = 'Peringatan Sensor';
+      detailBody = formatAlertLine(alert);
+    }
+  } else {
+    title = isEcLow ? 'Peringatan Nutrisi & Lingkungan' : 'Peringatan Parameter Lingkungan';
+    const lines = alerts.map((alert) => {
+      if (alert.key === 'ec' && alert.status === 'Low') {
+        return `• EC (${formatValue(alert.value)} mS/cm) di bawah batas minimal normal (${formatValue(alert.threshold)} mS/cm). Estimasi tren NPK sekarang: (N = ${nStr}, P = ${pStr}, K = ${kStr}).`;
+      }
+      return `• ${formatAlertLine(alert)}`;
+    });
+    detailBody = lines.join('\n');
   }
 
   const logRef = db.collection(config.firestore.thresholdAlertLogsCollection).doc();
   const recentAlertCount = await countRecentAlertLogs(alerts);
   const summaryText = `${recentAlertCount} peringatan nutrisi terdeteksi dalam 1 jam terakhir. Buka halaman Logs untuk melihat detail.`;
-  const bodyText = ecLowAlert ? detailBody : summaryText;
+  const bodyText = detailBody;
 
   await logRef.set({
     topic: config.automation.fcmTopic,
