@@ -135,7 +135,8 @@ async function sendThresholdNotification(alerts, reading) {
   const pStr = reading.phosphorus != null ? `${formatValue(reading.phosphorus)} mg/kg` : '-';
   const kStr = reading.potassium != null ? `${formatValue(reading.potassium)} mg/kg` : '-';
 
-  const isEcLow = alerts.some((a) => a.key === 'ec' && a.status === 'Low');
+  const hasNutrientAlert = alerts.some((a) => a.key === 'ec');
+  const hasEnvAlert = alerts.some((a) => a.key === 'ph' || a.key === 'temperature' || a.key === 'moisture');
   let title = 'Peringatan Sensor';
   let detailBody = '';
 
@@ -148,7 +149,7 @@ async function sendThresholdNotification(alerts, reading) {
         detailBody = `Nilai EC (${formatValue(alert.value)} mS/cm) di bawah batas minimal normal (${formatValue(alert.threshold)} mS/cm). Estimasi tren NPK sekarang: (N = ${nStr}, P = ${pStr}, K = ${kStr}).`;
       } else {
         title = 'Peringatan Nutrisi Tinggi';
-        detailBody = `Nilai EC (${formatValue(alert.value)} mS/cm) di atas batas maksimal normal (${formatValue(alert.threshold)} mS/cm).`;
+        detailBody = `Nilai EC (${formatValue(alert.value)} mS/cm) di atas batas maksimal normal (${formatValue(alert.threshold)} mS/cm). Estimasi tren NPK sekarang: (N = ${nStr}, P = ${pStr}, K = ${kStr}).`;
       }
     } else if (alert.key === 'ph') {
       title = isLow ? 'Peringatan pH Tanah Terlalu Asam' : 'Peringatan pH Tanah Terlalu Basa';
@@ -167,10 +168,20 @@ async function sendThresholdNotification(alerts, reading) {
       detailBody = formatAlertLine(alert);
     }
   } else {
-    title = isEcLow ? 'Peringatan Nutrisi & Lingkungan' : 'Peringatan Parameter Lingkungan';
+    if (hasNutrientAlert && hasEnvAlert) {
+      title = 'Peringatan Nutrisi & Lingkungan';
+    } else if (hasNutrientAlert) {
+      title = 'Peringatan Nutrisi';
+    } else {
+      title = 'Peringatan Parameter Lingkungan';
+    }
     const lines = alerts.map((alert) => {
-      if (alert.key === 'ec' && alert.status === 'Low') {
-        return `• EC (${formatValue(alert.value)} mS/cm) di bawah batas minimal normal (${formatValue(alert.threshold)} mS/cm). Estimasi tren NPK sekarang: (N = ${nStr}, P = ${pStr}, K = ${kStr}).`;
+      if (alert.key === 'ec') {
+        if (alert.status === 'Low') {
+          return `• EC (${formatValue(alert.value)} mS/cm) di bawah batas minimal normal (${formatValue(alert.threshold)} mS/cm). Estimasi tren NPK sekarang: (N = ${nStr}, P = ${pStr}, K = ${kStr}).`;
+        } else {
+          return `• EC (${formatValue(alert.value)} mS/cm) di atas batas maksimal normal (${formatValue(alert.threshold)} mS/cm). Estimasi tren NPK sekarang: (N = ${nStr}, P = ${pStr}, K = ${kStr}).`;
+        }
       }
       return `• ${formatAlertLine(alert)}`;
     });

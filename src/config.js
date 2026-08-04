@@ -79,7 +79,8 @@ const config = {
       'threshold_alert_logs',
   },
   automation: {
-    dssCheckIntervalMs: readNumberEnv('DSS_CHECK_INTERVAL_MS', 2 * 60 * 1000),
+    dssCheckIntervalMs: readNumberEnv('DSS_CHECK_INTERVAL_MS', 10 * 60 * 1000),
+    dssCooldownMs: readNumberEnv('DSS_COOLDOWN_MS', 10 * 60 * 1000),
     dssPulseDurationMs: readNumberEnv('DSS_PULSE_DURATION_MS', 5 * 1000),
     maxSensorAgeMs: readNumberEnv('DSS_MAX_SENSOR_AGE_MS', 10 * 60 * 1000),
     scheduleCheckIntervalMs: readNumberEnv(

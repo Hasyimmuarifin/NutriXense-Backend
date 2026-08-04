@@ -292,8 +292,9 @@ function startDssWorker(mqttClient) {
       if (reading.id && reading.id === lastProcessedReadingId) {
         return;
       }
-      if (nowMs - lastDssExecutionTime < 2 * 60 * 1000) {
-        console.log('DSS pulse skipped due to 2-minute cooldown window.');
+      const cooldownMs = config.automation.dssCooldownMs || 10 * 60 * 1000;
+      if (nowMs - lastDssExecutionTime < cooldownMs) {
+        console.log(`DSS pulse skipped due to ${Math.round(cooldownMs / 60000)}-minute cooldown window.`);
         return;
       }
       lastDssExecutionTime = nowMs;
